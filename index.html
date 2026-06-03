@@ -54,6 +54,13 @@
   .note{font-size:9px;color:#999}
   .btn-dl{padding:8px 18px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;transition:opacity .12s}
   .btn-dl:hover{opacity:.85}
+  /* 儲存 / 匯出匯入 */
+  .save-bar{display:flex;gap:6px;margin-top:2px}
+  .sbtn{flex:1;justify-content:center;padding:9px 8px;border:1px solid #d8d8da;border-radius:5px;font-size:11px;font-weight:600;
+        background:#fff;color:#444;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .12s}
+  .sbtn:hover{border-color:#f5a623;color:#1a1a1a;background:#fff8ef}
+  .save-note{font-size:9px;color:#aaa;display:flex;align-items:center;gap:3px;text-align:center;justify-content:center}
+  .save-note.ok{color:#267F53}
 </style>
 </head>
 <body>
@@ -137,6 +144,12 @@
         </div>
       </div>
       <button class="btn-gen" id="btn-gen" onclick="render()">產生圖片</button>
+      <div class="save-bar">
+        <button class="sbtn" id="btn-export" onclick="exportCfg()">💾 儲存設定</button>
+        <button class="sbtn" id="btn-import" onclick="document.getElementById('imp-file').click()">📂 載入設定</button>
+        <input type="file" id="imp-file" accept="application/json,.json" style="display:none" onchange="importCfg(event)">
+      </div>
+      <p class="save-note" id="save-note">調整後可按「儲存設定」存成檔案備用</p>
     </div>
     <div class="pp">
       <h3>預覽</h3>
@@ -271,7 +284,7 @@ function handleImg(e){
   document.getElementById('f-'+k).addEventListener('input',render));
 
 // ── DRAW ─────────────────────────────────────────────
-function render(){ draw(ctx, DISP_W, DISP_H); draw(fctx, FULL_W, FULL_H); }
+function render(){ draw(ctx, DISP_W, DISP_H); draw(fctx, FULL_W, FULL_H); autoSave(); }
 
 function draw(c, sw, sh){
   const p = PAL[cat][sidx];
@@ -518,8 +531,115 @@ function dlPNG(){
   a.href=injectDPI(full.toDataURL('image/png'),300); a.click();
 }
 
+// ── 儲存草稿 / 匯出 / 匯入 ────────────────────────────
+const CAT_ORDER = ['trade','edu','event','class','inst'];
+const LS_KEY = 'linePoster_draft_v1';
+
+function captureState(){
+  return {
+    _type:'line-poster-config', _v:1,
+    cat, sidx,
+    fields:{
+      hook: document.getElementById('f-hook').value,
+      title:document.getElementById('f-title').value,
+      body: document.getElementById('f-body').value,
+      date: document.getElementById('f-date').value,
+      price:document.getElementById('f-price').value,
+    },
+    sizes:{ hook:getSz('hook'), title:getSz('title'), body:getSz('body'), date:getSz('date'), price:getSz('price') },
+    img: uImg ? document.getElementById('img-thumb').src : null,
+  };
+}
+
+function applyState(s){
+  if(!s || !s.fields) return false;
+  cat  = CAT_ORDER.includes(s.cat) ? s.cat : 'trade';
+  sidx = (typeof s.sidx==='number' && PAL[cat][s.sidx]) ? s.sidx : 0;
+  const btns = document.querySelectorAll('.mbtn');
+  btns.forEach(b=>b.classList.remove('active'));
+  const bi = CAT_ORDER.indexOf(cat);
+  if(btns[bi]){ btns[bi].classList.add('active'); document.getElementById('ftitle').textContent = btns[bi].textContent.trim(); }
+  ['hook','title','body','date','price'].forEach(k=>{
+    document.getElementById('f-'+k).value = (s.fields[k]!=null) ? s.fields[k] : (DEFAULTS[cat][k]||'');
+  });
+  document.getElementById('fg-date').style.display  = DEFAULTS[cat].date ? '' : 'none';
+  document.getElementById('fg-price').style.display = DEFAULTS[cat].showPrice ? '' : 'none';
+  ['hook','title','body','date','price'].forEach(k=>{
+    const el = document.getElementById('sz-'+k); if(!el) return;
+    const v = (s.sizes && s.sizes[k]!=null) ? s.sizes[k] : SZ_DEFAULTS[k];
+    el.value = v; document.getElementById('sv-'+k).textContent = v;
+  });
+  if(s.img){
+    const im = new Image();
+    im.onload = ()=>{ uImg = im; const t=document.getElementById('img-thumb'); t.src=s.img; t.style.display='block'; render(); };
+    im.src = s.img;
+  } else {
+    uImg = null; const t=document.getElementById('img-thumb'); t.src=''; t.style.display='none';
+  }
+  buildPalette(cat); render(); syncUI();
+  return true;
+}
+
+// 自動儲存到 localStorage（靜默，去抖動，避免拖滑桿時狂寫）— 用於下次開啟自動帶回
+let saveTimer = null;
+function autoSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      localStorage.setItem(LS_KEY, JSON.stringify(captureState()));
+    }catch(e){
+      const n = document.getElementById('save-note');
+      if(n){ n.textContent = '⚠ 內容太大無法自動暫存（圖片過大）'; n.classList.remove('ok'); }
+    }
+  }, 400);
+}
+
+function exportCfg(){
+  const lbl = document.getElementById('ftitle').textContent.replace(/[^\w一-鿿]+/g,'');
+  const blob = new Blob([JSON.stringify(captureState(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.download = `Line@設定_${lbl}.json`;
+  a.href = URL.createObjectURL(blob); a.click();
+  URL.revokeObjectURL(a.href);
+  const n = document.getElementById('save-note');
+  n.textContent = `✓ 已儲存設定檔：Line@設定_${lbl}.json`; n.classList.add('ok');
+}
+
+function importCfg(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev=>{
+    try{
+      const s = JSON.parse(ev.target.result);
+      const n = document.getElementById('save-note');
+      if(applyState(s)){
+        n.textContent = '✓ 已匯入設定'; n.classList.add('ok');
+      }else{
+        n.textContent = '⚠ 檔案格式不符，無法匯入'; n.classList.remove('ok');
+      }
+    }catch(err){
+      const n = document.getElementById('save-note');
+      n.textContent = '⚠ 檔案格式不符，無法匯入'; n.classList.remove('ok');
+    }
+  };
+  r.readAsText(f);
+  e.target.value = '';  // 允許再次選同一檔
+}
+
 // ── INIT ─────────────────────────────────────────────
 (function(){
+  // 嘗試還原上次草稿
+  let restored = false;
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) restored = applyState(JSON.parse(raw));
+  }catch(e){}
+  if(restored){
+    const n = document.getElementById('save-note');
+    n.textContent = '✓ 已帶回上次的草稿'; n.classList.add('ok');
+    return;
+  }
+  // 無草稿 → 預設
   const D=DEFAULTS['trade'];
   ['hook','title','body','date','price'].forEach(k=>document.getElementById('f-'+k).value=D[k]||'');
   document.getElementById('fg-price').style.display='none';
