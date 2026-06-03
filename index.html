@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line@社群圖片生成</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+       background:#f5f5f7;color:#1a1a1a;min-height:100vh;display:flex;flex-direction:column}
+  header{background:#fff;padding:12px 20px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #e5e5e7}
+  header h1{font-size:13px;font-weight:600;color:#1a1a1a}
+  header .badge{margin-left:auto;font-size:10px;color:#888;border:1px solid #e5e5e7;padding:2px 8px;border-radius:3px}
+  .app{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:190px;min-width:190px;background:#fff;padding:18px 10px;display:flex;flex-direction:column;gap:4px;border-right:1px solid #e5e5e7}
+  .sec{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;padding:0 9px}
+  .mbtn{display:flex;align-items:center;gap:11px;padding:13px 13px;border-radius:9px;background:transparent;border:none;cursor:pointer;color:#555;font-size:14px;font-weight:600;transition:all .12s;text-align:left;width:100%}
+  .mbtn:hover{background:#f0f0f2;color:#1a1a1a}
+  .mbtn.active{color:#1a1a1a;font-weight:700;background:#fff3e0;box-shadow:inset 3px 0 0 #f5a623}
+  .mbtn .mi{font-size:22px;width:28px;text-align:center;flex-shrink:0;line-height:1}
+  .editor{flex:1;display:flex;gap:12px;padding:12px;overflow:auto;align-items:flex-start}
+  .fp{width:256px;min-width:236px;background:#fff;border-radius:7px;padding:13px;display:flex;flex-direction:column;gap:9px;border:1px solid #e5e5e7;flex-shrink:0}
+  .fp h2{font-size:12px;font-weight:600;color:#1a1a1a}
+  .fg{display:flex;flex-direction:column;gap:3px}
+  .fg label{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px}
+  .fg input,.fg textarea{background:#fafafa;border:1px solid #e0e0e2;border-radius:4px;padding:6px 8px;color:#1a1a1a;font-size:12px;outline:none;transition:border .12s;resize:none;font-family:inherit;line-height:1.5}
+  .fg input:focus,.fg textarea:focus{border-color:#f5a623}
+  .fg textarea{min-height:48px}
+  .r2{display:flex;gap:6px}.r2 .fg{flex:1}
+  #f-hook{font-size:14px;font-weight:700;color:#1a1a1a;border-color:#d0d0d2}
+  /* 字體大小滑桿列 */
+  .sz-row{display:flex;align-items:center;gap:7px;margin-top:2px}
+  .sz-row input[type=range]{flex:1;height:3px;accent-color:#f5a623;cursor:pointer;background:transparent}
+  .sz-row .sv{font-size:10px;color:#888;min-width:26px;text-align:right;font-family:'SF Mono',monospace}
+  .sz-group{display:flex;flex-direction:column;gap:5px;padding:8px 0 4px;border-top:1px solid #ececec}
+  .sz-group .sg-label{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+  .sz-item{display:flex;align-items:center;gap:0}
+  .sz-item .si-label{font-size:10px;color:#888;width:52px;flex-shrink:0}
+  .pg{display:flex;flex-wrap:wrap;gap:4px}
+  .ps{width:28px;height:18px;border-radius:3px;cursor:pointer;border:1.5px solid transparent;transition:transform .11s,border .11s;flex-shrink:0}
+  .ps:hover,.ps.sel{transform:scale(1.22);border-color:#1a1a1a!important}
+  .ua{border:1px dashed #d0d0d2;border-radius:4px;padding:9px;text-align:center;cursor:pointer;position:relative;transition:border .12s}
+  .ua:hover{border-color:#f5a623}
+  .ua input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .ua p{font-size:10px;color:#999}
+  .ua .ui{font-size:14px;margin-bottom:2px;color:#888}
+  .thumb{width:100%;max-height:48px;object-fit:contain;border-radius:3px;margin-top:3px;display:none}
+  .btn-gen{padding:9px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+  .btn-gen:hover{opacity:.88}
+  .pp{flex:1;display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0}
+  .pp h3{font-size:9px;color:#999;align-self:flex-start;text-transform:uppercase;letter-spacing:1.5px}
+  .cw{border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px #e5e5e7,0 12px 32px rgba(0,0,0,.12)}
+  canvas{display:block}
+  .note{font-size:9px;color:#999}
+  .btn-dl{padding:8px 18px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;transition:opacity .12s}
+  .btn-dl:hover{opacity:.85}
+</style>
+</head>
+<body>
+<header>
+  <h1>Line@社群圖片生成</h1>
+  <span class="badge">1100 × 1000 · 300 DPI</span>
+</header>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sec">類型</div>
+    <div><button class="mbtn active" onclick="sw('trade',this)"><span class="mi">♻️</span>舊換新</button></div>
+    <div><button class="mbtn" onclick="sw('edu',this)"><span class="mi">🎓</span>教育價</button></div>
+    <div><button class="mbtn" onclick="sw('event',this)"><span class="mi">📅</span>檔期優惠</button></div>
+    <div><button class="mbtn" onclick="sw('class',this)"><span class="mi">📚</span>小教室</button></div>
+    <div><button class="mbtn" onclick="sw('inst',this)"><span class="mi">💳</span>分期表</button></div>
+  </aside>
+  <div class="editor">
+    <div class="fp">
+      <h2 id="ftitle">♻️ 舊換新</h2>
+
+      <!-- 主視覺大字 + 字體大小 -->
+      <div class="fg">
+        <label>主視覺大字（最重要）</label>
+        <input id="f-hook" type="text" maxlength="12" placeholder="最高補貼 $3,000">
+        <div class="sz-row">
+          <span style="font-size:10px;color:#3a3a3a;width:52px;flex-shrink:0">字體大小</span>
+          <input type="range" id="sz-hook" min="80" max="220" value="172" oninput="updSz('hook');render()">
+          <span class="sv" id="sv-hook">172</span>
+        </div>
+      </div>
+
+      <!-- 活動標題 + 字體大小 -->
+      <div class="fg">
+        <label>活動標題（右上角 Tag）</label>
+        <input id="f-title" type="text" maxlength="8">
+        <div class="sz-row">
+          <span style="font-size:10px;color:#3a3a3a;width:52px;flex-shrink:0">字體大小</span>
+          <input type="range" id="sz-title" min="14" max="50" value="22" oninput="updSz('title');render()">
+          <span class="sv" id="sv-title">22</span>
+        </div>
+      </div>
+
+      <!-- 說明文字 + 字體大小 -->
+      <div class="fg">
+        <label>說明文字（每行一條，最多3行）</label>
+        <textarea id="f-body" rows="3"></textarea>
+        <div class="sz-row">
+          <span style="font-size:10px;color:#3a3a3a;width:52px;flex-shrink:0">字體大小</span>
+          <input type="range" id="sz-body" min="20" max="80" value="44" oninput="updSz('body');render()">
+          <span class="sv" id="sv-body">44</span>
+        </div>
+      </div>
+
+      <div class="r2">
+        <div class="fg" id="fg-date">
+          <label>日期</label>
+          <input id="f-date" type="text">
+          <div class="sz-row">
+            <span style="font-size:10px;color:#3a3a3a;width:52px;flex-shrink:0">字體大小</span>
+            <input type="range" id="sz-date" min="14" max="60" value="36" oninput="updSz('date');render()">
+            <span class="sv" id="sv-date">36</span>
+          </div>
+        </div>
+        <div class="fg" id="fg-price" style="display:none">
+          <label>價格</label>
+          <input id="f-price" type="text" maxlength="12">
+          <div class="sz-row">
+            <span style="font-size:10px;color:#3a3a3a;width:52px;flex-shrink:0">字體大小</span>
+            <input type="range" id="sz-price" min="30" max="100" value="72" oninput="updSz('price');render()">
+            <span class="sv" id="sv-price">72</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fg"><label>配色</label><div class="pg" id="pal-grid"></div></div>
+      <div class="fg">
+        <label>產品圖片（選填）</label>
+        <div class="ua"><div class="ui">↑</div><p>點擊或拖曳</p>
+          <input type="file" accept="image/*" onchange="handleImg(event)">
+          <img class="thumb" id="img-thumb">
+        </div>
+      </div>
+      <button class="btn-gen" id="btn-gen" onclick="render()">產生圖片</button>
+    </div>
+    <div class="pp">
+      <h3>預覽</h3>
+      <div class="cw"><canvas id="cvs"></canvas></div>
+      <p class="note">1100 × 1000 px · 300 DPI</p>
+      <button class="btn-dl" id="btn-dl" onclick="dlPNG()">↓ 下載 PNG</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 更新滑桿顯示值 ────────────────────────────────────
+function updSz(k){
+  const v = document.getElementById('sz-'+k).value;
+  document.getElementById('sv-'+k).textContent = v;
+}
+function getSz(k){ return parseInt(document.getElementById('sz-'+k).value); }
+
+// ── 配色 ─────────────────────────────────────────────
+const PAL = {
+  trade:[
+    {bg:'#2E90CF', dark:'#1A5F8A', ac:'#FFDF51'},
+    {bg:'#267F53', dark:'#14422B', ac:'#FCCA59'},
+    {bg:'#99B7F5', dark:'#3A5FAA', ac:'#267F53'},
+    {bg:'#3CBF96', dark:'#1F7A5E', ac:'#FFDF51'},
+  ],
+  edu:[
+    {bg:'#FF639B', dark:'#C0205E', ac:'#FFDF51'},
+    {bg:'#FF4040', dark:'#B00000', ac:'#FFDF51'},
+    {bg:'#F296BD', dark:'#C03070', ac:'#267F53'},
+    {bg:'#F5793B', dark:'#B03800', ac:'#FFDF51'},
+  ],
+  event:[
+    {bg:'#F5793B', dark:'#B03800', ac:'#FFDF51'},
+    {bg:'#FF4040', dark:'#B00000', ac:'#FCCA59'},
+    {bg:'#FCCA59', dark:'#B07800', ac:'#FF4040'},
+    {bg:'#FF639B', dark:'#C0205E', ac:'#FCCA59'},
+  ],
+  class:[
+    {bg:'#3CBF96', dark:'#1F7A5E', ac:'#FFDF51'},
+    {bg:'#267F53', dark:'#14422B', ac:'#FCCA59'},
+    {bg:'#99B7F5', dark:'#3A5FAA', ac:'#FF639B'},
+    {bg:'#2E90CF', dark:'#1A5F8A', ac:'#FFDF51'},
+  ],
+  inst:[
+    {bg:'#267F53', dark:'#14422B', ac:'#FCCA59'},
+    {bg:'#2E90CF', dark:'#1A5F8A', ac:'#FF639B'},
+    {bg:'#F5793B', dark:'#B03800', ac:'#FFDF51'},
+    {bg:'#FF639B', dark:'#C0205E', ac:'#FFDF51'},
+  ],
+};
+
+const META = {
+  trade:{ icon:'♻️', label:'舊換新' },
+  edu:  { icon:'🎓', label:'教育價' },
+  event:{ icon:'📅', label:'檔期優惠' },
+  class:{ icon:'💡', label:'小教室' },
+  inst: { icon:'💳', label:'分期表' },
+};
+
+const DEFAULTS = {
+  trade:{hook:'最高補貼 $3,000', title:'舊換新',  body:'舊機到店鑑價\n直接折抵換購金額\n名額有限，把握機會', date:'06/01 – 06/30', price:'',         showPrice:false},
+  edu:  {hook:'教育優惠價',      title:'教育價',  body:'憑學生證到店申辦\n享教育優惠折扣\n加碼贈 AppleCare+', date:'',            price:'NT$35,900 起', showPrice:true},
+  event:{hook:'全館限時特賣',    title:'檔期優惠',body:'精選商品限時折扣\n配件加碼優惠\n錯過再等一年',       date:'06/01 – 06/15', price:'',         showPrice:false},
+  class:{hook:'你學會了嗎？',    title:'小教室',  body:'本週主題：AirDrop\n一步驟快速傳檔\n每週持續更新',   date:'',             price:'',         showPrice:false},
+  inst: {hook:'0% 利率',         title:'分期表',  body:'3 / 6 / 12 / 24 期\n指定信用卡零利率\n歡迎洽詢門市', date:'06/01 – 06/30', price:'',         showPrice:false},
+};
+
+// 字體大小預設（對應 R×N，N 值）
+const SZ_DEFAULTS = { hook:172, title:22, body:44, date:36, price:72 };
+
+// ── Canvas Retina ─────────────────────────────────────
+const DPR = Math.min(window.devicePixelRatio||1, 3);
+const DISP_W = 550, DISP_H = 500, FULL_W = 1100, FULL_H = 1000;
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+cvs.width = DISP_W*DPR; cvs.height = DISP_H*DPR;
+cvs.style.width = DISP_W+'px'; cvs.style.height = DISP_H+'px';
+ctx.scale(DPR, DPR);
+const full = document.createElement('canvas');
+full.width = FULL_W; full.height = FULL_H;
+const fctx = full.getContext('2d');
+
+let cat='trade', sidx=0, uImg=null;
+
+function syncUI(){
+  const p = PAL[cat][sidx];
+  document.getElementById('btn-gen').style.cssText=`background:${p.dark};color:#fff;`;
+  document.getElementById('btn-dl').style.cssText =`background:${p.dark};color:#fff;`;
+}
+
+function buildPalette(c){
+  const g = document.getElementById('pal-grid'); g.innerHTML='';
+  PAL[c].forEach((p,i)=>{
+    const el = document.createElement('div');
+    el.className='ps'+(i===sidx?' sel':'');
+    el.style.cssText=`background:${p.bg};border-color:${i===sidx?'#fff':'transparent'}`;
+    el.onclick=()=>{
+      sidx=i;
+      g.querySelectorAll('.ps').forEach((e,j)=>{e.classList.toggle('sel',j===i);e.style.borderColor=j===i?'#fff':'transparent';});
+      render(); syncUI();
+    };
+    g.appendChild(el);
+  });
+}
+
+function sw(c, btn){
+  cat=c; sidx=0;
+  document.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const D = DEFAULTS[c];
+  document.getElementById('ftitle').textContent = btn.textContent.trim();
+  ['hook','title','body','date','price'].forEach(k=>document.getElementById('f-'+k).value=D[k]||'');
+  document.getElementById('fg-date').style.display  = D.date?'':'none';
+  document.getElementById('fg-price').style.display = D.showPrice?'':'none';
+  // 重置字體大小滑桿
+  Object.entries(SZ_DEFAULTS).forEach(([k,v])=>{
+    const el = document.getElementById('sz-'+k);
+    if(el){ el.value=v; document.getElementById('sv-'+k).textContent=v; }
+  });
+  buildPalette(c); render(); syncUI();
+}
+
+function handleImg(e){
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{const im=new Image(); im.onload=()=>{ uImg=im; document.getElementById('img-thumb').src=ev.target.result; document.getElementById('img-thumb').style.display='block'; render(); }; im.src=ev.target.result;};
+  r.readAsDataURL(f);
+}
+
+['hook','title','body','date','price'].forEach(k=>
+  document.getElementById('f-'+k).addEventListener('input',render));
+
+// ── DRAW ─────────────────────────────────────────────
+function render(){ draw(ctx, DISP_W, DISP_H); draw(fctx, FULL_W, FULL_H); }
+
+function draw(c, sw, sh){
+  const p = PAL[cat][sidx];
+  const M = META[cat];
+  const R = sw / 1100;
+
+  const hook  = document.getElementById('f-hook').value  || DEFAULTS[cat].hook;
+  const title = document.getElementById('f-title').value || DEFAULTS[cat].title;
+  const body  = document.getElementById('f-body').value  || DEFAULTS[cat].body;
+  const date  = document.getElementById('f-date').value;
+  const price = document.getElementById('f-price').value;
+  const lines = body.split('\n').filter(Boolean).slice(0, 3);
+
+  // 讀取滑桿字體大小（乘以 R 縮放）
+  const FS = {
+    hook:  R * getSz('hook'),
+    title: R * getSz('title'),
+    body:  R * getSz('body'),
+    date:  R * getSz('date'),
+    price: R * getSz('price'),
+  };
+
+  c.clearRect(0, 0, sw, sh);
+
+  const CARD_R = R * 32;
+  const TOP    = sh * 0.60;
+  const PAD    = R * 56;
+  const CX     = sw / 2;
+  const BAR_H  = R * 96;
+
+  // 外框背景
+  c.fillStyle = '#F5F0E8';
+  c.fillRect(0, 0, sw, sh);
+
+  // 白卡陰影
+  c.save();
+  c.shadowColor = 'rgba(0,0,0,0.18)'; c.shadowBlur = R*40; c.shadowOffsetY = R*8;
+  c.fillStyle = '#fff';
+  c.beginPath(); rr(c, R*20, R*20, sw-R*40, sh-R*40, CARD_R); c.fill();
+  c.restore();
+
+  const CX2    = R*20 + (sw-R*40)/2;
+  const CARD_X = R*20, CARD_Y = R*20;
+  const CARD_W = sw - R*40, CARD_H = sh - R*40;
+  const CARD_TOP = CARD_Y + TOP * (CARD_H/sh);
+
+  // 上半色塊
+  c.save();
+  c.beginPath(); rrTop(c, CARD_X, CARD_Y, CARD_W, CARD_TOP-CARD_Y, CARD_R);
+  c.fillStyle = p.bg; c.fill();
+  c.restore();
+
+  // 頂列 BAR
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.22)';
+  c.beginPath(); rrTop(c, CARD_X, CARD_Y, CARD_W, BAR_H, CARD_R); c.fill();
+  c.restore();
+
+  // BAR：icon（左）+ 活動名稱（icon右）+ TAG pill（右）— 全部置中對齊 BAR 垂直中心
+  const BAR_MID = CARD_Y + BAR_H / 2;
+
+  // icon
+  c.save();
+  c.font = `${R*48}px serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(M.icon, CARD_X + PAD*0.7 + R*24, BAR_MID);
+  c.restore();
+
+  // 活動名稱
+  c.save();
+  c.font = `700 ${R*34}px -apple-system,sans-serif`;
+  c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.fillStyle = '#fff'; c.globalAlpha = 0.95;
+  c.fillText(M.label, CARD_X + PAD*0.7 + R*66, BAR_MID);
+  c.restore();
+
+  // TAG pill（置中於 BAR）
+  if(title){
+    c.save();
+    c.font = `700 ${FS.title}px -apple-system,sans-serif`;
+    const tw = c.measureText(title).width;
+    const pH = FS.title * 1.72, pPad = FS.title * 0.82, pW = tw + pPad*2;
+    const pX = CARD_X + CARD_W - pW - PAD*0.7;
+    const pY = BAR_MID - pH/2;
+    c.fillStyle = p.ac;
+    c.beginPath();
+    c.moveTo(pX+pH/2, pY);
+    c.lineTo(pX+pW-pH/2, pY); c.arcTo(pX+pW,pY, pX+pW,pY+pH/2, pH/2);
+    c.arcTo(pX+pW,pY+pH, pX+pW-pH/2,pY+pH, pH/2);
+    c.lineTo(pX+pH/2, pY+pH); c.arcTo(pX,pY+pH, pX,pY+pH/2, pH/2);
+    c.arcTo(pX,pY, pX+pH/2,pY, pH/2);
+    c.closePath(); c.fill();
+    c.fillStyle = '#1a1a1a';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(title, pX+pW/2, BAR_MID);
+    c.restore();
+  }
+
+  // 主視覺大字（色塊中央，垂直水平置中）
+  const maxW = CARD_W - PAD*2;
+  function bestSplit(txt, fs){
+    c.font = `900 ${fs}px -apple-system,sans-serif`;
+    if(c.measureText(txt).width <= maxW) return [txt];
+    const half = txt.length/2;
+    let best=-1, bd=Infinity;
+    for(let i=1;i<txt.length;i++){
+      const ok = txt[i]===' ' || /[\u4e00-\u9fff]/.test(txt[i-1]);
+      if(ok && Math.abs(i-half)<bd){ bd=Math.abs(i-half); best=i; }
+    }
+    if(best<0) best=Math.round(half);
+    return [txt.slice(0,best).trim(), txt.slice(best).trim()];
+  }
+
+  let hfs = FS.hook;
+  c.font = `900 ${hfs}px -apple-system,sans-serif`;
+  let hLines = bestSplit(hook, hfs);
+  while(hLines.some(l=>c.measureText(l).width > maxW) && hfs > R*40){
+    hfs -= R*4;
+    c.font = `900 ${hfs}px -apple-system,sans-serif`;
+    hLines = bestSplit(hook, hfs);
+  }
+
+  const czTop = CARD_Y + BAR_H;
+  const czBot = CARD_TOP;
+  const czH   = czBot - czTop;
+  const hTotalH = hLines.length * hfs * 1.1;
+  const hStartY = czTop + (czH - hTotalH) / 2;
+
+  hLines.forEach((ln, li) => {
+    c.save();
+    c.font = `900 ${hfs}px -apple-system,sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    c.fillStyle = '#FFFFFF';
+    c.shadowColor = 'rgba(0,0,0,0.18)'; c.shadowBlur=R*10; c.shadowOffsetY=R*4;
+    c.fillText(ln, CX2, hStartY + li*hfs*1.1);
+    c.restore();
+  });
+
+  // 產品圖（跨色塊/白底分界）
+  if(uImg){
+    const iSz = CARD_H*0.28;
+    const iX  = CARD_X + CARD_W - iSz - PAD*0.6;
+    const iY  = CARD_TOP - iSz*0.5;
+    c.save();
+    c.shadowColor='rgba(0,0,0,0.25)'; c.shadowBlur=R*20; c.shadowOffsetY=R*8;
+    c.fillStyle='#fff'; c.beginPath(); rr(c,iX,iY,iSz,iSz,R*14); c.fill();
+    c.restore();
+    c.save();
+    c.beginPath(); rr(c,iX,iY,iSz,iSz,R*14); c.clip();
+    const ratio=Math.max(iSz/uImg.width,iSz/uImg.height);
+    const dw=uImg.width*ratio, dh=uImg.height*ratio;
+    c.drawImage(uImg,iX+(iSz-dw)/2,iY+(iSz-dh)/2,dw,dh);
+    c.restore();
+  }
+
+  // 下半白底資訊區
+  let iy = CARD_TOP + R*40;
+
+  // 價格（教育價）
+  if(price){
+    c.save();
+    c.font = `900 ${FS.price}px -apple-system,sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    c.fillStyle = p.bg;
+    c.fillText(price, CX2, iy);
+    c.restore();
+    iy += FS.price + R*20;
+    c.save();
+    c.strokeStyle='#ececec'; c.lineWidth=R*1.5;
+    c.beginPath(); c.moveTo(CARD_X+PAD,iy); c.lineTo(CARD_X+CARD_W-PAD,iy); c.stroke();
+    c.restore();
+    iy += R*20;
+  }
+
+  // 說明文字（全部置中）
+  lines.forEach((ln, li) => {
+    c.save();
+    c.font = `${li===0?'700':'500'} ${FS.body}px -apple-system,sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    c.fillStyle = '#1a1a1a';
+    c.globalAlpha = li===0 ? 0.90 : 0.58;
+    c.fillText(ln, CX2, iy);
+    c.restore();
+    iy += FS.body * 1.45;
+  });
+
+  // 日期（置中）
+  if(date){
+    iy += R*8;
+    c.save();
+    c.font = `700 ${FS.date}px -apple-system,sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    c.fillStyle = p.dark; c.globalAlpha = 0.78;
+    c.fillText(date, CX2, iy);
+    c.restore();
+  }
+
+  // 右下色點
+  const dotY = CARD_Y + CARD_H - R*28;
+  const dotX = CARD_X + CARD_W - PAD*0.7;
+  [p.bg, p.ac, p.dark].forEach((col, i) => {
+    c.save();
+    c.fillStyle=col; c.globalAlpha=0.55;
+    c.beginPath(); c.arc(dotX-i*R*24, dotY, R*7, 0, Math.PI*2); c.fill();
+    c.restore();
+  });
+}
+
+// ── roundRect helpers ─────────────────────────────────
+function rr(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+function rrTop(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h); c.lineTo(x,y+h);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+
+// ── 300 DPI EXPORT ───────────────────────────────────
+const CT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c;}return t;})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CT[(c^b[i])&0xFF]^(c>>>8);return(c^0xFFFFFFFF)>>>0;}
+function injectDPI(url,dpi=300){
+  const H='data:image/png;base64,',raw=atob(url.slice(H.length)),src=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)src[i]=raw.charCodeAt(i);
+  const AT=33,ppm=Math.round(dpi/0.0254),tp=[0x70,0x48,0x59,0x73];
+  const dt=[(ppm>>>24)&255,(ppm>>>16)&255,(ppm>>>8)&255,ppm&255,(ppm>>>24)&255,(ppm>>>16)&255,(ppm>>>8)&255,ppm&255,1];
+  const crc=crc32(new Uint8Array([...tp,...dt]));
+  const ck=new Uint8Array([0,0,0,9,...tp,...dt,(crc>>>24)&255,(crc>>>16)&255,(crc>>>8)&255,crc&255]);
+  const out=new Uint8Array(src.length+ck.length);
+  out.set(src.slice(0,AT));out.set(ck,AT);out.set(src.slice(AT),AT+ck.length);
+  let s='';out.forEach(b=>s+=String.fromCharCode(b));return H+btoa(s);
+}
+function dlPNG(){
+  const lbl=document.getElementById('ftitle').textContent.replace(/[^\w\u4e00-\u9fff]+/g,'');
+  const a=document.createElement('a');
+  a.download=`Line@社群圖片_${lbl}_1100x1000_300dpi.png`;
+  a.href=injectDPI(full.toDataURL('image/png'),300); a.click();
+}
+
+// ── INIT ─────────────────────────────────────────────
+(function(){
+  const D=DEFAULTS['trade'];
+  ['hook','title','body','date','price'].forEach(k=>document.getElementById('f-'+k).value=D[k]||'');
+  document.getElementById('fg-price').style.display='none';
+  document.getElementById('fg-date').style.display='';
+  buildPalette('trade'); render(); syncUI();
+})();
+</script>
+</body>
+</html>
