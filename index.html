@@ -61,6 +61,12 @@
   .sbtn:hover{border-color:#f5a623;color:#1a1a1a;background:#fff8ef}
   .save-note{font-size:9px;color:#aaa;display:flex;align-items:center;gap:3px;text-align:center;justify-content:center}
   .save-note.ok{color:#267F53}
+  /* 尺寸切換 */
+  .size-toggle{display:flex;gap:6px}
+  .szb{flex:1;padding:7px 6px;border:1px solid #d8d8da;border-radius:5px;background:#fff;color:#666;font-size:11px;font-weight:600;cursor:pointer;transition:all .12s;font-family:inherit}
+  .szb:hover{border-color:#f5a623}
+  .szb.active{background:#fff3e0;border-color:#f5a623;color:#1a1a1a}
+  .szb small{display:block;font-size:8px;color:#aaa;font-weight:500;margin-top:1px}
 </style>
 </head>
 <body>
@@ -80,6 +86,15 @@
   <div class="editor">
     <div class="fp">
       <h2 id="ftitle">♻️ 舊換新</h2>
+
+      <!-- 圖片尺寸 -->
+      <div class="fg">
+        <label>圖片尺寸</label>
+        <div class="size-toggle" id="size-toggle">
+          <button class="szb active" data-size="landscape" onclick="setSize('landscape')">橫式<small>1100 × 1000</small></button>
+          <button class="szb" data-size="square" onclick="setSize('square')">方形<small>1040 × 1040</small></button>
+        </div>
+      </div>
 
       <!-- 主視覺大字 + 字體大小 -->
       <div class="fg">
@@ -145,11 +160,10 @@
       </div>
       <button class="btn-gen" id="btn-gen" onclick="render()">產生圖片</button>
       <div class="save-bar">
-        <button class="sbtn" id="btn-export" onclick="exportCfg()">💾 儲存設定</button>
-        <button class="sbtn" id="btn-import" onclick="document.getElementById('imp-file').click()">📂 載入設定</button>
-        <input type="file" id="imp-file" accept="application/json,.json" style="display:none" onchange="importCfg(event)">
+        <button class="sbtn" id="btn-export" onclick="saveCfg()">💾 儲存設定</button>
+        <button class="sbtn" id="btn-import" onclick="loadCfg()">📂 載入設定</button>
       </div>
-      <p class="save-note" id="save-note">調整後可按「儲存設定」存成檔案備用</p>
+      <p class="save-note" id="save-note">調整後可按「儲存設定」記住目前的內容</p>
     </div>
     <div class="pp">
       <h3>預覽</h3>
@@ -223,15 +237,37 @@ const SZ_DEFAULTS = { hook:172, title:22, body:44, date:36, price:72 };
 
 // ── Canvas Retina ─────────────────────────────────────
 const DPR = Math.min(window.devicePixelRatio||1, 3);
-const DISP_W = 550, DISP_H = 500, FULL_W = 1100, FULL_H = 1000;
+const SIZES = {
+  landscape:{ w:1100, h:1000 },
+  square:   { w:1040, h:1040 },
+};
+let sizeKey = 'landscape';
+let FULL_W = 1100, FULL_H = 1000, DISP_W = 550, DISP_H = 500;
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
-cvs.width = DISP_W*DPR; cvs.height = DISP_H*DPR;
-cvs.style.width = DISP_W+'px'; cvs.style.height = DISP_H+'px';
-ctx.scale(DPR, DPR);
 const full = document.createElement('canvas');
-full.width = FULL_W; full.height = FULL_H;
 const fctx = full.getContext('2d');
+
+function applyCanvasSize(){
+  const s = SIZES[sizeKey] || SIZES.landscape;
+  FULL_W = s.w; FULL_H = s.h;
+  DISP_W = s.w/2; DISP_H = s.h/2;          // 預覽固定為輸出的一半
+  cvs.width = DISP_W*DPR; cvs.height = DISP_H*DPR;
+  cvs.style.width = DISP_W+'px'; cvs.style.height = DISP_H+'px';
+  ctx.setTransform(1,0,0,1,0,0); ctx.scale(DPR, DPR);
+  full.width = FULL_W; full.height = FULL_H;
+}
+function syncSizeUI(){
+  document.querySelectorAll('#size-toggle .szb').forEach(b=>b.classList.toggle('active', b.dataset.size===sizeKey));
+  const lbl = SIZES[sizeKey].w+' × '+SIZES[sizeKey].h;
+  document.querySelector('header .badge').textContent = lbl+' · 300 DPI';
+  document.querySelector('.note').textContent = lbl+' px · 300 DPI';
+}
+function setSize(key){
+  if(!SIZES[key]) return;
+  sizeKey = key; applyCanvasSize(); syncSizeUI(); render();
+}
+applyCanvasSize();
 
 let cat='trade', sidx=0, uImg=null;
 
@@ -527,7 +563,7 @@ function injectDPI(url,dpi=300){
 function dlPNG(){
   const lbl=document.getElementById('ftitle').textContent.replace(/[^\w\u4e00-\u9fff]+/g,'');
   const a=document.createElement('a');
-  a.download=`Line@社群圖片_${lbl}_1100x1000_300dpi.png`;
+  a.download=`Line@社群圖片_${lbl}_${FULL_W}x${FULL_H}_300dpi.png`;
   a.href=injectDPI(full.toDataURL('image/png'),300); a.click();
 }
 
@@ -538,7 +574,7 @@ const LS_KEY = 'linePoster_draft_v1';
 function captureState(){
   return {
     _type:'line-poster-config', _v:1,
-    cat, sidx,
+    cat, sidx, size:sizeKey,
     fields:{
       hook: document.getElementById('f-hook').value,
       title:document.getElementById('f-title').value,
@@ -553,6 +589,8 @@ function captureState(){
 
 function applyState(s){
   if(!s || !s.fields) return false;
+  sizeKey = SIZES[s.size] ? s.size : 'landscape';
+  applyCanvasSize(); syncSizeUI();
   cat  = CAT_ORDER.includes(s.cat) ? s.cat : 'trade';
   sidx = (typeof s.sidx==='number' && PAL[cat][s.sidx]) ? s.sidx : 0;
   const btns = document.querySelectorAll('.mbtn');
@@ -594,36 +632,37 @@ function autoSave(){
   }, 400);
 }
 
-function exportCfg(){
-  const lbl = document.getElementById('ftitle').textContent.replace(/[^\w一-鿿]+/g,'');
-  const blob = new Blob([JSON.stringify(captureState(), null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.download = `Line@設定_${lbl}.json`;
-  a.href = URL.createObjectURL(blob); a.click();
-  URL.revokeObjectURL(a.href);
+// 手動儲存槽（與自動暫存分開：autoSave 會隨編輯一直覆蓋草稿，這裡是固定的還原點）
+const SAVE_KEY = 'linePoster_saved_v1';
+
+function saveCfg(){
   const n = document.getElementById('save-note');
-  n.textContent = `✓ 已儲存設定檔：Line@設定_${lbl}.json`; n.classList.add('ok');
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify(captureState()));
+    n.textContent = '✓ 已儲存目前設定（按「載入設定」可隨時還原）';
+    n.classList.add('ok');
+  }catch(e){
+    n.textContent = '⚠ 無法儲存（圖片過大）'; n.classList.remove('ok');
+  }
 }
 
-function importCfg(e){
-  const f = e.target.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = ev=>{
-    try{
-      const s = JSON.parse(ev.target.result);
-      const n = document.getElementById('save-note');
-      if(applyState(s)){
-        n.textContent = '✓ 已匯入設定'; n.classList.add('ok');
-      }else{
-        n.textContent = '⚠ 檔案格式不符，無法匯入'; n.classList.remove('ok');
-      }
-    }catch(err){
-      const n = document.getElementById('save-note');
-      n.textContent = '⚠ 檔案格式不符，無法匯入'; n.classList.remove('ok');
+function loadCfg(){
+  const n = document.getElementById('save-note');
+  let raw = null;
+  try{ raw = localStorage.getItem(SAVE_KEY); }catch(e){}
+  if(!raw){
+    n.textContent = '⚠ 尚未儲存過任何設定'; n.classList.remove('ok');
+    return;
+  }
+  try{
+    if(applyState(JSON.parse(raw))){
+      n.textContent = '✓ 已載入儲存的設定'; n.classList.add('ok');
+    }else{
+      n.textContent = '⚠ 儲存的設定無法載入'; n.classList.remove('ok');
     }
-  };
-  r.readAsText(f);
-  e.target.value = '';  // 允許再次選同一檔
+  }catch(err){
+    n.textContent = '⚠ 儲存的設定無法載入'; n.classList.remove('ok');
+  }
 }
 
 // ── INIT ─────────────────────────────────────────────
